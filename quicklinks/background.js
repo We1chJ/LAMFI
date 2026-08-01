@@ -4,7 +4,7 @@
  * EDIT THESE. The keys must match the command names in manifest.json.
  */
 const LINKS = {
-  "insert-linkedin": "https://www.linkedin.com/in/YOUR-HANDLE",
+  "insert-linkedin": "https://www.linkedin.com/in/erqi-jack-wei/",
   "insert-github": "https://github.com/We1chJ",
 };
 
