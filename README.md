@@ -13,7 +13,6 @@ personal running total, optionally synced across devices via Cloudflare.
 | Path | What |
 | --- | --- |
 | `extension/` | auto-connect + counter |
-| `quicklinks/` | separate extension: hotkeys that paste fixed links |
 | `worker/` | Cloudflare Worker for cross-device sync (optional) |
 
 ---
@@ -108,15 +107,6 @@ change — a 50-invite run is one POST, not fifty. Necessary because KV allows
 **Non-obvious:** pull happens on page load only (no polling, so two open tabs
 don't track each other), and `lamfi:sendLog` doesn't sync — so **the weekly cap
 is per-device**.
-
-## QuickLinks
-
-`Alt+Shift+L` / `Alt+Shift+G` insert a fixed link at the cursor, or copy to
-clipboard if nothing is focused. Set URLs in `quicklinks/background.js`, rebind
-at `chrome://extensions/shortcuts`.
-
-Chrome limits: no Windows/Super key, nothing on `chrome://` pages or the Web
-Store, max 4 shortcuts.
 
 ## Risks
 
