@@ -57,10 +57,35 @@ const LamfiAuto = (() => {
     dismiss: 'button[aria-label="Dismiss"]',
   };
 
-  // Wording LinkedIn uses when you've run out of invites. Matching any of
-  // these aborts the run immediately rather than hammering a closed door.
+  /**
+   * LinkedIn's actual wording, observed:
+   *   "Your invitation to Liv was not sent because you have reached the weekly
+   *    limit for connection invitations. Please try again next week"
+   *
+   * Specific enough to scan broadly without tripping on ordinary page content.
+   */
+  const LIMIT_EXACT =
+    /was not sent because you have reached the weekly limit|weekly limit for connection invitations/i;
+
+  /** Looser — only applied inside dialogs, alerts and toasts. */
   const LIMIT_PATTERN =
-    /weekly invitation limit|reached the weekly|you've reached|no invitations left|try again later/i;
+    /weekly (invitation )?limit|reached the weekly|you've reached|no invitations left|try again (next week|later)/i;
+
+  /**
+   * Critically NOT dialog-only. LinkedIn delivers the limit notice as a toast
+   * or inline banner, so a dialog-scoped check misses it entirely — and since
+   * no modal appears, every subsequent click gets counted as a successful send.
+   */
+  const LIMIT_SCOPES =
+    'div[role="dialog"],[role="alert"],[role="status"],.artdeco-toast-item,.artdeco-inline-feedback,.artdeco-notification';
+
+  function limitNoticeVisible() {
+    for (const node of document.querySelectorAll(LIMIT_SCOPES)) {
+      // textContent, not innerText: no layout flush on a hot loop.
+      if (LIMIT_PATTERN.test(node.textContent ?? "")) return true;
+    }
+    return LIMIT_EXACT.test(document.body.textContent ?? "");
+  }
 
   let running = false;
   let sentThisSession = 0;
@@ -75,8 +100,21 @@ const LamfiAuto = (() => {
   }
 
   const SEND_LOG_KEY = "lamfi:sendLog";
+  const LIMIT_KEY = "lamfi:limitHitAt";
   const DAY_MS = 24 * 60 * 60 * 1000;
   const WEEK_MS = 7 * DAY_MS;
+
+  /** Remember the block so the next run doesn't walk straight back into it. */
+  function recordLimitHit() {
+    return chrome.storage.local.set({ [LIMIT_KEY]: Date.now() });
+  }
+
+  async function limitBlockedUntil() {
+    const at = Number((await chrome.storage.local.get(LIMIT_KEY))?.[LIMIT_KEY]);
+    if (!at) return null;
+    const until = at + WEEK_MS;
+    return until > Date.now() ? until : null;
+  }
 
   /**
    * Timestamps of sent invites. Storing the times rather than a counter is
@@ -182,6 +220,7 @@ const LamfiAuto = (() => {
     let stuckDialogs = 0;
     // Invites that didn't confirm, back to back. Reset by any success.
     let consecutiveFailures = 0;
+    let limitHit = false;
     // A Connect click whose modal (if any) hasn't been resolved yet. Counting
     // is deferred until we know, so the total never counts an unsent invite.
     let pendingSend = false;
@@ -216,6 +255,16 @@ const LamfiAuto = (() => {
         break;
       }
 
+      // Checked every iteration: the notice is a toast, so there's no modal to
+      // hang the check off, and without this the loop keeps clicking and
+      // counting sends that LinkedIn is silently refusing.
+      if (limitNoticeVisible()) {
+        await recordLimitHit();
+        limitHit = true;
+        status("STOPPED: LinkedIn weekly invitation limit reached");
+        break;
+      }
+
       // Clear anything left over from last iteration before it blocks a click.
       if (!CONFIG.skipDialogs) {
         const stray = openDialog();
@@ -226,7 +275,9 @@ const LamfiAuto = (() => {
           }
           const outcome = await handleDialog(stray);
           if (outcome === "limit") {
-            status("STOPPED: LinkedIn says you're out of invites");
+            await recordLimitHit();
+            limitHit = true;
+            status("STOPPED: LinkedIn weekly invitation limit reached");
             break;
           }
           if (outcome === "sent") {
@@ -270,6 +321,16 @@ const LamfiAuto = (() => {
 
       btn.click();
 
+      // The toast can appear with no modal at all, which would otherwise be
+      // read as a clean send. Check before crediting anything.
+      if (limitNoticeVisible()) {
+        await recordLimitHit();
+        limitHit = true;
+        pendingSend = false;
+        status("STOPPED: LinkedIn weekly invitation limit reached");
+        break;
+      }
+
       if (CONFIG.skipDialogs) {
         // No verification possible in this mode; trust the click.
         await countSend();
@@ -280,7 +341,9 @@ const LamfiAuto = (() => {
         if (quick) {
           const outcome = await handleDialog(quick);
           if (outcome === "limit") {
-            status("STOPPED: LinkedIn says you're out of invites");
+            await recordLimitHit();
+            limitHit = true;
+            status("STOPPED: LinkedIn weekly invitation limit reached");
             break;
           }
           if (outcome === "sent") {
@@ -301,7 +364,8 @@ const LamfiAuto = (() => {
     }
 
     // Don't lose the last invite's count if the loop exited while one was open.
-    if (pendingSend && !openDialog()) await countSend();
+    // Unless we stopped on a limit — that invite was refused, not sent.
+    if (pendingSend && !limitHit && !openDialog()) await countSend();
 
     running = false;
   }
@@ -325,9 +389,29 @@ const LamfiAuto = (() => {
     start(statusCallback) {
       if (running) return false;
       onStatus = statusCallback ?? (() => {});
+
+      // Async so start() stays synchronous for callers; the guard resolves
+      // before any clicking happens.
+      limitBlockedUntil().then((until) => {
+        if (until) {
+          const days = Math.ceil((until - Date.now()) / DAY_MS);
+          status(
+            `blocked: weekly limit hit — retry in ~${days}d, or LamfiAuto.clearLimit()`,
+          );
+          running = false;
+          return;
+        }
+        run();
+      });
+
       running = true;
-      run();
       return true;
+    },
+
+    /** Override the post-limit block if LinkedIn has let you back in early. */
+    async clearLimit() {
+      await chrome.storage.local.remove(LIMIT_KEY);
+      status("limit block cleared");
     },
 
     stop() {
