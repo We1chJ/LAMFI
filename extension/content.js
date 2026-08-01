@@ -31,6 +31,10 @@
   const { week } = await LamfiAuto.stats();
   statusEl.textContent = `${week}/${LamfiAuto.CONFIG.weeklyCap} this week`;
 
+  // Non-blocking: if sync isn't configured or the network is down, the local
+  // counter carries on regardless.
+  LamfiSync.init();
+
   const setStatus = (message) => {
     statusEl.textContent = message;
   };
