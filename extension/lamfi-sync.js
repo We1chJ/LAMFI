@@ -12,7 +12,7 @@
  *
  * Credentials live in chrome.storage.local, never in the repo. Set them once
  * from the DevTools console on a LinkedIn tab:
- *   LamfiSync.configure("https://lamfi-counter.YOUR-SUBDOMAIN.workers.dev", "YOUR_TOKEN")
+ *   LamfiSync.configure("https://connection-stats.YOUR-SUBDOMAIN.workers.dev", "YOUR_TOKEN")
  */
 const LamfiSync = (() => {
   const COUNT_KEY = "lamfi:total";

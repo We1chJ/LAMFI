@@ -1,4 +1,4 @@
-name = "lamfi-counter"
+name = "connection-stats"
 main = "src/index.js"
 compatibility_date = "2025-04-01"
 
@@ -7,13 +7,14 @@ compatibility_date = "2025-04-01"
 # different users, and that requirement is gone.
 #
 # Replace `id` with the value printed by:
-#   wrangler kv namespace create ARCADE_STATS
+#   wrangler kv namespace create CONNECTION_STATS
 [[kv_namespaces]]
-binding = "ARCADE_STATS"
+binding = "CONNECTION_STATS"
 id = "PASTE_YOUR_NAMESPACE_ID_HERE"
 
 [observability]
 enabled = true
 
-# SYNC_TOKEN is a secret, not a var — set it with:
+# SYNC_TOKEN is a secret, not a var — never put it in this file, which is
+# committed to a public repo. Set it with:
 #   wrangler secret put SYNC_TOKEN

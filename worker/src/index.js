@@ -65,7 +65,7 @@ function json(body, { status = 200, origin } = {}) {
 }
 
 async function readTotal(env) {
-  const raw = await env.ARCADE_STATS.get(KV_KEY);
+  const raw = await env.CONNECTION_STATS.get(KV_KEY);
   if (!raw) return { total: 0, updatedAt: null };
   try {
     const parsed = JSON.parse(raw);
@@ -78,7 +78,7 @@ async function readTotal(env) {
 
 function writeTotal(env, total) {
   const record = { total, updatedAt: new Date().toISOString() };
-  return env.ARCADE_STATS.put(KV_KEY, JSON.stringify(record)).then(() => record);
+  return env.CONNECTION_STATS.put(KV_KEY, JSON.stringify(record)).then(() => record);
 }
 
 export default {
