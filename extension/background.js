@@ -4,37 +4,54 @@
  * Owns the right-click menu. Context menus can only be created from a
  * background context, not a content script, which is why this file exists.
  *
- * The menu item is a toggle: the content script reports its running state
- * back here, and the label and toolbar badge follow it. With no on-page UI,
- * the badge is the only way to tell whether a run is still going.
+ * Two items: a run toggle, and a show/hide toggle for the HUD. The second one
+ * matters — hiding the panel removes the last on-page control, so this menu is
+ * the only way to get it back.
  */
 
-const MENU_ID = "lamfi-toggle";
+const MENU_RUN = "lamfi-toggle";
+const MENU_HUD = "lamfi-hud";
 const LINKEDIN = "https://www.linkedin.com/*";
 
 const TITLE_IDLE = "Connect with everyone on this page";
 const TITLE_RUNNING = "Stop connecting";
+const TITLE_HIDE = "Hide counter";
+const TITLE_SHOW = "Show counter";
 
-function createMenu() {
-  // removeAll first so a reload can't leave a duplicate entry behind.
+function createMenus() {
+  // removeAll first so a reload can't leave duplicates behind.
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
-      id: MENU_ID,
+      id: MENU_RUN,
       title: TITLE_IDLE,
+      contexts: ["page", "selection", "link"],
+      documentUrlPatterns: [LINKEDIN],
+    });
+    chrome.contextMenus.create({
+      id: MENU_HUD,
+      title: TITLE_HIDE,
       contexts: ["page", "selection", "link"],
       documentUrlPatterns: [LINKEDIN],
     });
   });
 }
 
-chrome.runtime.onInstalled.addListener(createMenu);
-chrome.runtime.onStartup.addListener(createMenu);
+chrome.runtime.onInstalled.addListener(createMenus);
+chrome.runtime.onStartup.addListener(createMenus);
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId !== MENU_ID || !tab?.id) return;
-  chrome.tabs.sendMessage(tab.id, { type: "lamfi:toggle" }).catch(() => {
-    // Content script not present (page never finished loading, or the tab was
-    // opened before the extension was reloaded).
+  if (!tab?.id) return;
+  const type =
+    info.menuItemId === MENU_RUN
+      ? "lamfi:toggle"
+      : info.menuItemId === MENU_HUD
+        ? "lamfi:toggleHud"
+        : null;
+  if (!type) return;
+
+  chrome.tabs.sendMessage(tab.id, { type }).catch(() => {
+    // Content script absent — page never finished loading, or the tab predates
+    // the last extension reload. A hard reload of the tab fixes it.
     console.warn("[LAMFI] no content script in tab", tab.id);
   });
 });
@@ -42,11 +59,15 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg?.type !== "lamfi:state") return;
 
-  chrome.contextMenus.update(MENU_ID, {
+  chrome.contextMenus.update(MENU_RUN, {
     title: msg.running ? TITLE_RUNNING : TITLE_IDLE,
+  });
+  chrome.contextMenus.update(MENU_HUD, {
+    title: msg.hidden ? TITLE_SHOW : TITLE_HIDE,
   });
 
   // Badge is scoped to the reporting tab so two LinkedIn tabs don't fight.
+  // It's the only progress signal left when the HUD is hidden.
   const tabId = sender.tab?.id;
   if (tabId === undefined) return;
   chrome.action.setBadgeText({

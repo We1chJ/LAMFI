@@ -16,10 +16,25 @@
   user-select: none;
 }
 
+.lamfi-hidden {
+  display: none !important;
+}
+
 .lamfi-row {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.lamfi-hud button.lamfi-hide {
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.6;
+}
+
+.lamfi-hud button.lamfi-hide:hover {
+  opacity: 1;
 }
 
 .lamfi-label {

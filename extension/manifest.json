@@ -21,6 +21,7 @@
         "auto-connect.js",
         "content.js"
       ],
+      "css": ["hud.css"],
       "run_at": "document_idle"
     }
   ]
