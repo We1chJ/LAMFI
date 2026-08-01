@@ -23,20 +23,35 @@ const LamfiSync = (() => {
   let timer = null;
   let inFlight = false;
 
+  const valid = (c) =>
+    c?.url && c?.token && !c.token.startsWith("YOUR_") ? c : null;
+
+  /**
+   * Resolution order, most specific first:
+   *   1. config.local.js  — a per-machine override, if you keep one
+   *   2. chrome.storage.sync  — rides your Google account to every Chrome you
+   *      are signed into, so a new device needs no setup at all
+   *   3. chrome.storage.local — legacy, from before sync was used
+   */
   async function loadConfig() {
-    // A gitignored config.local.js wins if present, so there's no need to run
-    // configure() from the console. Falls back to whatever configure() stored.
-    if (
-      typeof LAMFI_CONFIG !== "undefined" &&
-      LAMFI_CONFIG?.url &&
-      LAMFI_CONFIG?.token &&
-      !LAMFI_CONFIG.token.startsWith("YOUR_")
-    ) {
+    if (typeof LAMFI_CONFIG !== "undefined" && valid(LAMFI_CONFIG)) {
       return LAMFI_CONFIG;
     }
-    const stored = await chrome.storage.local.get(CONFIG_KEY);
-    const c = stored?.[CONFIG_KEY];
-    return c?.url && c?.token ? c : null;
+
+    try {
+      const synced = valid((await chrome.storage.sync.get(CONFIG_KEY))?.[CONFIG_KEY]);
+      if (synced) return synced;
+    } catch (err) {
+      console.warn("[LAMFI sync] storage.sync unavailable:", err.message);
+    }
+
+    const local = valid((await chrome.storage.local.get(CONFIG_KEY))?.[CONFIG_KEY]);
+    if (local) {
+      // Migrate so other devices pick it up without being configured by hand.
+      chrome.storage.sync.set({ [CONFIG_KEY]: local }).catch(() => {});
+      return local;
+    }
+    return null;
   }
 
   async function localTotal() {
@@ -105,12 +120,22 @@ const LamfiSync = (() => {
   });
 
   return {
-    /** Store the Worker URL and token. Run once per device. */
+    /**
+     * Store the Worker URL and token. Run this ONCE, on any one device —
+     * chrome.storage.sync carries it to every Chrome signed into the same
+     * Google account, so other devices need nothing but the extension.
+     */
     async configure(url, token) {
       if (!url || !token) throw new Error("configure(url, token) needs both");
-      await chrome.storage.local.set({ [CONFIG_KEY]: { url, token } });
       config = { url, token };
-      console.log("[LAMFI sync] configured:", url);
+      try {
+        await chrome.storage.sync.set({ [CONFIG_KEY]: config });
+        console.log("[LAMFI sync] configured and synced to your other Chromes");
+      } catch (err) {
+        // Sync quota or sync disabled — still works here, just not elsewhere.
+        await chrome.storage.local.set({ [CONFIG_KEY]: config });
+        console.warn("[LAMFI sync] saved locally only:", err.message);
+      }
       return this.init();
     },
 
