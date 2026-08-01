@@ -24,6 +24,16 @@ const LamfiSync = (() => {
   let inFlight = false;
 
   async function loadConfig() {
+    // A gitignored config.local.js wins if present, so there's no need to run
+    // configure() from the console. Falls back to whatever configure() stored.
+    if (
+      typeof LAMFI_CONFIG !== "undefined" &&
+      LAMFI_CONFIG?.url &&
+      LAMFI_CONFIG?.token &&
+      !LAMFI_CONFIG.token.startsWith("YOUR_")
+    ) {
+      return LAMFI_CONFIG;
+    }
     const stored = await chrome.storage.local.get(CONFIG_KEY);
     const c = stored?.[CONFIG_KEY];
     return c?.url && c?.token ? c : null;
