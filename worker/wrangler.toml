@@ -1,0 +1,23 @@
+name = "lamfi-arcade-stats"
+main = "src/index.js"
+compatibility_date = "2025-04-01"
+
+# Durable Object holding the authoritative counter.
+[[durable_objects.bindings]]
+name = "GLOBAL_COUNTER"
+class_name = "GlobalCounter"
+
+# SQLite backend is required on the Workers Free plan (and new KV-backed
+# DO namespaces are no longer accepted as of 2026-07-09).
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GlobalCounter"]
+
+# Read cache for the counter. Replace `id` with the value printed by
+# `wrangler kv namespace create ARCADE_STATS`.
+[[kv_namespaces]]
+binding = "ARCADE_STATS"
+id = "PASTE_YOUR_NAMESPACE_ID_HERE"
+
+[observability]
+enabled = true

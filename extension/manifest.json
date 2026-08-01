@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "L.A.M.F.I.",
+  "version": "0.2.0",
+  "description": "Auto-connect on LinkedIn with a personal running total.",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/*"],
+      "js": ["lamfi-count.js", "auto-connect.js", "content.js"],
+      "css": ["hud.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
