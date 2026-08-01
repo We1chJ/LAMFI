@@ -10,7 +10,7 @@ compatibility_date = "2025-04-01"
 #   wrangler kv namespace create CONNECTION_STATS
 [[kv_namespaces]]
 binding = "CONNECTION_STATS"
-id = "PASTE_YOUR_NAMESPACE_ID_HERE"
+id = "c150307c2f694da5acac05be58dd5a62"
 
 [observability]
 enabled = true

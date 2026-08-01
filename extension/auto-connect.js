@@ -317,16 +317,9 @@ const LamfiAuto = (() => {
   return {
     CONFIG,
 
-    /** Count what the selectors can see, without clicking anything. */
-    scan() {
-      const all = document.querySelectorAll(SELECTORS.connect);
-      const usable = [];
-      for (const btn of all) {
-        const label = btn.getAttribute("aria-label") ?? "";
-        if (!btn.disabled && !/pending|withdraw/i.test(label)) usable.push(label);
-      }
-      console.log(`[LAMFI] ${all.length} matched, ${usable.length} usable:`, usable);
-      return { matched: all.length, usable: usable.length };
+    /** Invites sent in the current run — drives the toolbar badge. */
+    sessionCount() {
+      return sentThisSession;
     },
 
     start(statusCallback) {

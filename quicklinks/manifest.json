@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "QuickLinks",
+  "version": "0.1.0",
+  "description": "Paste your fixed links anywhere with a keyboard shortcut.",
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "commands": {
+    "insert-linkedin": {
+      "suggested_key": { "default": "Alt+Shift+L", "mac": "Alt+Shift+L" },
+      "description": "Insert LinkedIn link"
+    },
+    "insert-github": {
+      "suggested_key": { "default": "Alt+Shift+G", "mac": "Alt+Shift+G" },
+      "description": "Insert GitHub link"
+    }
+  }
+}

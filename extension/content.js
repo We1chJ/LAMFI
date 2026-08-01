@@ -1,62 +1,50 @@
 /**
- * L.A.M.F.I. — HUD and controls.
+ * L.A.M.F.I. — content script.
  *
- * Builds the on-page panel, wires it to LamfiCount (the counter) and
- * LamfiAuto (the click engine).
+ * No on-page UI. Everything is driven from the right-click menu, which the
+ * background worker owns; this file just wires that to the click engine and
+ * reports state back so the menu label and toolbar badge stay accurate.
+ *
+ * Progress goes to the console. Escape still stops a run from anywhere.
  */
 (async () => {
-  const el = (tag, props) => Object.assign(document.createElement(tag), props);
+  // No element passed: the counter runs headless and just persists the total.
+  await LamfiCount.init({});
 
-  const countEl = el("span", { id: "lamfi-count", textContent: "0" });
-  const statusEl = el("span", { className: "lamfi-status", textContent: "idle" });
-  const runBtn = el("button", { type: "button", textContent: "START" });
-  const scanBtn = el("button", {
-    type: "button",
-    textContent: "scan",
-    title: "Count the Connect buttons on this page without clicking any",
-  });
-
-  const hud = el("div", { className: "lamfi-hud" });
-  const row = el("div", { className: "lamfi-row" });
-  row.append(
-    el("span", { className: "lamfi-label", textContent: "LINKED" }),
-    countEl,
-    runBtn,
-    scanBtn,
-  );
-  hud.append(row, statusEl);
-  document.body.append(hud);
-
-  await LamfiCount.init({ el: countEl });
-  const { week } = await LamfiAuto.stats();
-  statusEl.textContent = `${week}/${LamfiAuto.CONFIG.weeklyCap} this week`;
-
-  // Non-blocking: if sync isn't configured or the network is down, the local
-  // counter carries on regardless.
+  // Non-blocking — if sync isn't configured or the network is down, counting
+  // carries on regardless.
   LamfiSync.init();
 
-  const setStatus = (message) => {
-    statusEl.textContent = message;
-  };
+  let lastReported = null;
 
-  // The engine can stop on its own (caps, no buttons left, LinkedIn cutting us
-  // off), so poll rather than assuming the button reflects reality.
-  setInterval(() => {
-    const on = LamfiAuto.isRunning();
-    runBtn.textContent = on ? "STOP" : "START";
-    runBtn.classList.toggle("lamfi-running", on);
-  }, 300);
+  function report() {
+    const running = LamfiAuto.isRunning();
+    const sent = LamfiAuto.sessionCount();
+    const signature = `${running}:${sent}`;
+    if (signature === lastReported) return;
+    lastReported = signature;
+    chrome.runtime
+      .sendMessage({ type: "lamfi:state", running, sent })
+      .catch(() => {
+        /* service worker asleep; next tick will retry */
+      });
+  }
 
-  runBtn.addEventListener("click", () => {
-    if (LamfiAuto.isRunning()) {
-      LamfiAuto.stop();
-    } else {
-      LamfiAuto.start(setStatus);
-    }
+  // The engine stops on its own (caps, no buttons left, LinkedIn cutting us
+  // off), so poll rather than assuming the last command reflects reality.
+  setInterval(report, 500);
+
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type !== "lamfi:toggle") return;
+
+    // No status callback: the engine already console.logs every status line,
+    // and passing one here would double every message.
+    if (LamfiAuto.isRunning()) LamfiAuto.stop();
+    else LamfiAuto.start();
+    report();
+    sendResponse({ running: LamfiAuto.isRunning() });
+    return true;
   });
 
-  scanBtn.addEventListener("click", () => {
-    const { matched, usable } = LamfiAuto.scan();
-    setStatus(`${usable} usable of ${matched} found`);
-  });
+  report();
 })();
