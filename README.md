@@ -1,4 +1,6 @@
-<img src="extension/icons/icon128.png" width="96" align="right" alt="L.A.M.F.I. icon">
+<p align="center">
+  <img src="extension/icons/icon128.png" width="112" alt="L.A.M.F.I. icon">
+</p>
 
 # L.A.M.F.I. — Link All MotherFuckers In
 
