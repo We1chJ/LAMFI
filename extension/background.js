@@ -15,8 +15,8 @@ const LINKEDIN = "https://www.linkedin.com/*";
 
 const TITLE_IDLE = "Connect with everyone on this page";
 const TITLE_RUNNING = "Stop connecting";
-const TITLE_HIDE = "Hide counter";
-const TITLE_SHOW = "Show counter";
+const TITLE_HIDE = "Collapse counter";
+const TITLE_SHOW = "Expand counter";
 
 function createMenus() {
   // removeAll first so a reload can't leave duplicates behind.
@@ -63,7 +63,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     title: msg.running ? TITLE_RUNNING : TITLE_IDLE,
   });
   chrome.contextMenus.update(MENU_HUD, {
-    title: msg.hidden ? TITLE_SHOW : TITLE_HIDE,
+    title: msg.collapsed ? TITLE_SHOW : TITLE_HIDE,
   });
 
   // Badge is scoped to the reporting tab so two LinkedIn tabs don't fight.
