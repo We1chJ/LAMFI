@@ -16,8 +16,11 @@
   });
 
   await LamfiCount.init({ el: countEl });
-  const { week } = await LamfiAuto.stats();
-  LamfiHud.setStatus(`${week}/${LamfiAuto.CONFIG.weeklyCap} this week`);
+
+  // Following a Connect link leaves the page, which tears this script down and
+  // reloads it here. If a run was mid-flight, pick it up rather than sitting
+  // idle on an invite page the user never asked to see.
+  LamfiAuto.resumeIfNeeded(LamfiHud.setStatus);
 
   // Non-blocking: if sync isn't configured or the network is down, the local
   // counter carries on regardless.
@@ -38,8 +41,8 @@
       });
   }
 
-  // The engine stops on its own (caps, no buttons left, LinkedIn cutting us
-  // off), so poll rather than trusting the last command.
+  // The engine stops on its own (no buttons left, LinkedIn cutting us off), so
+  // poll rather than trusting the last command.
   setInterval(() => {
     LamfiHud.setRunning(LamfiAuto.isRunning());
     report();
