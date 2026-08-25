@@ -77,7 +77,9 @@ modal refusing to close, and it isn't one. Email gates don't count toward the 5-
 brake, since they're an expected outcome rather than a sign something broke.
 
 Per invite: find control → activate → wait for proof → resolve the modal →
-count → wait 3–7s.
+count → wait 0.8–2s. Roughly 1.5s each on a
+surface where pressing works; a surface that needs its link followed costs two
+page loads instead.
 
 "Activate" is a ladder, because clicking isn't one operation. A `<button>` wired
 to onClick responds to `element.click()`; a control whose handler listens on
@@ -109,7 +111,7 @@ climbed and no invite went out.
 Top of `extension/auto-connect.js`:
 
 ```js
-delayMinMs: 3000, delayMaxMs: 7000,  // gap between invites
+delayMinMs: 800,  delayMaxMs: 2000,  // gap between invites
 dialogGraceMs: 60,                   // modal glance
 settleMs: 100,                       // floor — see below
 skipDialogs: false,

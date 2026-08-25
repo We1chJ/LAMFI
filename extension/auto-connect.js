@@ -32,18 +32,18 @@ const LamfiAuto = (() => {
     // ~300ms this used to run at is nothing like a person working through a
     // list, and pace is one of the things LinkedIn watches. At this range a
     // full weekly allowance still takes well under ten minutes.
-    delayMinMs: 3000,
-    delayMaxMs: 7000,
+    delayMinMs: 800,
+    delayMaxMs: 2000,
     // How long to wait for proof that activating a control did something —
     // an invite modal, or the control disappearing. Returns as soon as either
     // shows, so the usual cost is well under this. Only a control that is
     // genuinely inert burns the whole window, and then only until a later
     // strategy works and gets remembered.
-    confirmMs: 2500,
+    confirmMs: 1200,
     // Let scrolling / modal transitions finish. This is the hard floor —
     // under ~100ms clicks land on elements React is still repositioning, so
     // you start hitting the wrong row or nothing at all.
-    settleMs: 400,
+    settleMs: 200,
     // Skip the between-invites sweep for a leftover modal. Sends are still
     // verified either way; this only trades a little safety for speed on
     // accounts that never show one. Off by default — a stray modal swallows
@@ -67,7 +67,7 @@ const LamfiAuto = (() => {
     // pages anyway; this stops a broken "Next" from looping forever.
     maxPages: 100,
     maxScrollAttempts: 5,
-    scrollWaitMs: 1500,
+    scrollWaitMs: 1000,
   };
 
   /**
@@ -249,6 +249,15 @@ const LamfiAuto = (() => {
   let tried = new Set();
   let hops = 0;
   let pagesTurned = 0;
+
+  /**
+   * Control shapes whose in-page presses do nothing, so the only thing that
+   * works is following their link. Persisted alongside the rest of the run
+   * state because following a link reloads the page and would otherwise wipe
+   * it — and rediscovering it costs two full confirmation windows per person,
+   * every person, forever.
+   */
+  let navigateShapes = new Set();
 
   /**
    * Whitespace-normalised text. Modal copy is laid out across elements and
@@ -509,6 +518,8 @@ const LamfiAuto = (() => {
       sent: sentThisSession,
       tried: [...tried],
       hops,
+      navigateShapes: [...navigateShapes],
+      pagesTurned,
     });
     status(`next page (${pagesTurned + 1})`);
     next.click();
@@ -609,7 +620,18 @@ const LamfiAuto = (() => {
    */
   async function activateControl(btn) {
     const label = btn.getAttribute("aria-label") ?? "";
-    const known = strategyByShape.get(shapeOf(btn));
+    const shape = shapeOf(btn);
+    const href = btn.getAttribute("href");
+
+    // Already established that pressing this shape in-page does nothing. Go
+    // straight to its link rather than burning a confirmation window per rung
+    // to rediscover that for every single person.
+    if (href && navigateShapes.has(shape)) {
+      followInviteLink(btn, href);
+      return "navigating";
+    }
+
+    const known = strategyByShape.get(shape);
     const order = known
       ? [known, ...STRATEGIES.filter((s) => s !== known)]
       : STRATEGIES;
@@ -627,7 +649,7 @@ const LamfiAuto = (() => {
 
       if (proof) {
         if (!known) status(`activation: ${strategy.name} works here`);
-        strategyByShape.set(shapeOf(btn), strategy);
+        strategyByShape.set(shape, strategy);
         return proof;
       }
       if (!running) return null;
@@ -637,8 +659,11 @@ const LamfiAuto = (() => {
     // destination, go there — that is what following a link means, and it
     // needs no synthetic input at all. The page unloads, so this returns
     // nothing; resumeIfNeeded() picks the run back up on the other side.
-    const href = btn.getAttribute("href");
     if (href) {
+      if (!navigateShapes.has(shape)) {
+        status(`activation: ${shape} needs its link followed`);
+        navigateShapes.add(shape);
+      }
       followInviteLink(btn, href);
       return "navigating";
     }
@@ -656,6 +681,8 @@ const LamfiAuto = (() => {
       sent: sentThisSession,
       tried: [...tried],
       hops,
+      navigateShapes: [...navigateShapes],
+      pagesTurned,
     });
     status(`opening invite page (${hops})`);
     location.href = new URL(href, location.origin).toString();
@@ -685,6 +712,8 @@ const LamfiAuto = (() => {
     sentThisSession = state.sent ?? 0;
     tried = new Set(state.tried ?? []);
     hops = state.hops ?? 0;
+    navigateShapes = new Set(state.navigateShapes ?? []);
+    pagesTurned = state.pagesTurned ?? 0;
 
     if (hops > CONFIG.maxHops) {
       clearResume();
@@ -707,7 +736,13 @@ const LamfiAuto = (() => {
           return false;
         } else status(outcome);
       }
-      saveResume({ ...state, phase: "return", sent: sentThisSession, tried: [...tried] });
+      saveResume({
+        ...state,
+        phase: "return",
+        sent: sentThisSession,
+        tried: [...tried],
+        navigateShapes: [...navigateShapes],
+      });
       location.href = state.returnUrl;
       return true;
     }
@@ -737,6 +772,7 @@ const LamfiAuto = (() => {
       tried = new Set();
       hops = 0;
       pagesTurned = 0;
+      navigateShapes = new Set();
     }
     let scrollAttempts = 0;
     // Guards against a modal we can't dismiss spinning the loop forever.
