@@ -27,9 +27,10 @@ After any edit: click ↻ **and** hard-reload the LinkedIn tab
 (`Cmd/Ctrl+Shift+R`). Skipping the reload leaves an orphaned content script
 that logs `chrome-extension://invalid/` and silently does nothing.
 
-Then click the toolbar icon to open the dashboard and paste an Anthropic API
-key under **Settings**. Without one, everything still works — the AI hook is
-just left for you to type.
+Then click the toolbar icon to open the dashboard and paste an OpenAI API key
+under **Settings**. The model defaults to `gpt-4o-mini`; any OpenAI chat model
+name works. Without a key, everything still works — the AI hook is just left
+for you to type.
 
 ## The HUD
 
@@ -88,7 +89,7 @@ On a profile, **💌 Reach out** does, in order:
 3. Saves the contact.
 4. Works out the relationship. Not connected → Connect **with a note**
    (300-char cap). Already connected → direct message. Pending → stops.
-5. Asks Claude for `{{hook}}`: one or two sentences grounded in their profile,
+5. Asks OpenAI for `{{hook}}`: one or two sentences grounded in their profile,
    written to serve the goal you set in Settings. Email and phone are not sent
    to the API.
 6. Renders your template and shows it in the HUD. Edit it, **✨ New hook** to
@@ -121,7 +122,7 @@ Toolbar icon, 📊 on the HUD, or right-click → *Open L.A.M.F.I. dashboard*.
   selection, or on the whole filtered list when nothing is selected.
   **Mark exported** stamps them; **Not yet exported** then shows only what's
   new since.
-- **Settings** — API key, model, your goal, both templates, auto-send, pacing.
+- **Settings** — OpenAI API key, model, your goal, both templates, auto-send, pacing.
 
 Everything is in `chrome.storage.local` on this machine. The background
 service worker is the only writer, so two LinkedIn tabs can't clobber each
@@ -132,7 +133,7 @@ other. Updates on one tab show on the dashboard live.
 ```
 extension/
   manifest.json
-  background.js          CRM writes, Claude call, badge, menus, dashboard opener
+  background.js          CRM writes, OpenAI call, badge, menus, dashboard opener
   content/
     dom.js               what LinkedIn's markup looks like — the one place to fix
     connect.js           the run engine

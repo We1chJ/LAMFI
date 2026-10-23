@@ -2,7 +2,7 @@
  * L.A.M.F.I. — wiring.
  *
  * Connects the HUD to the run engine, the profile flow, and the background
- * worker (which owns storage and the Claude call).
+ * worker (which owns storage and the OpenAI call).
  */
 (async () => {
   const D = LamfiDom;
@@ -70,7 +70,7 @@
       const template = isNote ? settings.noteTemplate : settings.messageTemplate;
 
       const hookFor = async () => {
-        status("asking Claude for a hook…");
+        status("asking AI for a hook…");
         try {
           return await send({ type: "ai:hook", profile });
         } catch (e) {

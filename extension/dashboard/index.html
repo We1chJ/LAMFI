@@ -92,13 +92,21 @@
         <div class="card-head"><h2>⚙️ Settings</h2></div>
         <form id="settings-form" class="form">
           <label>
-            <span>🔑 Anthropic API key</span>
-            <input type="password" name="apiKey" autocomplete="off" placeholder="sk-ant-…" />
+            <span>🔑 OpenAI API key</span>
+            <input type="password" name="apiKey" autocomplete="off" placeholder="sk-…" />
             <small>Stored only in this browser's extension storage. Used from the background worker, never from the LinkedIn page.</small>
           </label>
           <label>
             <span>🧠 Model</span>
-            <input type="text" name="model" />
+            <input type="text" name="model" list="models" />
+            <datalist id="models">
+              <option value="gpt-4o-mini"></option>
+              <option value="gpt-4.1-mini"></option>
+              <option value="gpt-4.1-nano"></option>
+              <option value="gpt-5-mini"></option>
+              <option value="gpt-5-nano"></option>
+            </datalist>
+            <small>Any OpenAI chat model name. A small one is plenty for a sentence or two.</small>
           </label>
           <label>
             <span>🎯 Your goal (what the AI writes the hook to serve)</span>

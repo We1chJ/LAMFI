@@ -5,7 +5,7 @@
  * messages here; nothing else touches chrome.storage.local, so two LinkedIn
  * tabs can never interleave a read-modify-write and lose a contact.
  *
- * Also: the Claude API call (the key never leaves this worker), the toolbar
+ * Also: the OpenAI call (the key never leaves this worker), the toolbar
  * badge, the right-click menu, and opening the dashboard.
  */
 
@@ -13,7 +13,9 @@ const KEYS = { contacts: "contacts", events: "events", settings: "settings" };
 
 const DEFAULT_SETTINGS = {
   apiKey: "",
-  model: "claude-opus-5-5",
+  // Small and cheap is plenty for one or two sentences. Any chat model name
+  // OpenAI accepts works here.
+  model: "gpt-4o-mini",
   // What the AI is told about *you* — it writes {{hook}} to serve this.
   goal:
     "I'm building my network with people in my field. Friendly, direct, no flattery, no sales pitch.",
@@ -46,7 +48,11 @@ async function read(...keys) {
 }
 
 async function getSettings() {
-  return { ...DEFAULT_SETTINGS, ...((await read(KEYS.settings)) ?? {}) };
+  const settings = { ...DEFAULT_SETTINGS, ...((await read(KEYS.settings)) ?? {}) };
+  // Saved from when the hook came from Anthropic: neither works with OpenAI.
+  if (/^claude-/.test(settings.model)) settings.model = DEFAULT_SETTINGS.model;
+  if (/^sk-ant-/.test(settings.apiKey)) settings.apiKey = "";
+  return settings;
 }
 
 /** Drop undefined / empty fields so a thin patch can't blank a rich record. */
@@ -122,57 +128,45 @@ function saveSettings(patch) {
   });
 }
 
-// ---------------------------------------------------------------- Claude
+// ---------------------------------------------------------------- OpenAI
+
+const OPENAI_URL = "https://api.openai.com/v1/chat/completions";
 
 async function craftHook(profile) {
   const settings = await getSettings();
-  if (!settings.apiKey) throw new Error("no API key — set one in the dashboard");
+  if (!settings.apiKey) throw new Error("no OpenAI API key — set one in the dashboard");
 
   const { email, phone, websites, ...visible } = profile;
   const body = {
     model: settings.model,
-    max_tokens: 400,
-    output_config: { effort: "low" },
-    system: HOOK_SYSTEM,
+    // max_completion_tokens, not max_tokens: newer models reject the old name.
+    // No temperature either, for the same reason; the default is fine here.
+    max_completion_tokens: 300,
     messages: [
+      { role: "system", content: HOOK_SYSTEM },
       {
         role: "user",
         content: `Sender's goal:\n${settings.goal}\n\nTheir profile:\n${JSON.stringify(visible, null, 2)}`,
       },
     ],
   };
-  const headers = {
-    "content-type": "application/json",
-    "x-api-key": settings.apiKey,
-    "anthropic-version": "2023-06-01",
-    // Required for requests that carry a browser Origin, which extension
-    // service workers do.
-    "anthropic-dangerous-direct-browser-access": "true",
-  };
-  // Let a safety-classifier decline re-run on Anthropic's recommended
-  // fallback instead of coming back empty. Only the 5-series accepts this.
-  if (/claude-(opus-5|sonnet-5-5|fable-5)/.test(settings.model)) {
-    headers["anthropic-beta"] = "server-side-fallback-2026-07-01";
-    body.fallbacks = "default";
-  }
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch(OPENAI_URL, {
     method: "POST",
-    headers,
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${settings.apiKey}`,
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
     const detail = (await res.text()).slice(0, 300);
-    throw new Error(`Claude API ${res.status}: ${detail}`);
+    throw new Error(`OpenAI API ${res.status}: ${detail}`);
   }
-  const msg = await res.json();
-  if (msg.stop_reason === "refusal") throw new Error("Claude declined to write this one");
-  const text = (msg.content ?? [])
-    .filter((b) => b.type === "text")
-    .map((b) => b.text)
-    .join("")
-    .trim();
-  if (!text) throw new Error("Claude returned no text");
+  const msg = (await res.json()).choices?.[0]?.message;
+  if (msg?.refusal) throw new Error("the model declined to write this one");
+  const text = (msg?.content ?? "").trim();
+  if (!text) throw new Error("the model returned no text");
   return text;
 }
 

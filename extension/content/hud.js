@@ -28,7 +28,7 @@ const LamfiHud = (() => {
     [/limit/i, "🛑"],
     [/sent to|invite \+ note sent|message sent/i, "💌"],
     [/^sent \d+/i, "🎉"],
-    [/asking claude/i, "✨"],
+    [/asking ai/i, "✨"],
     [/reading|contact info/i, "🔍"],
     [/^saved/i, "📇"],
     [/next page/i, "📄"],
