@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>L.A.M.F.I.</title>
+  <link rel="icon" href="../icons/icon32.png" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <img src="../icons/icon48.png" alt="" width="36" height="36" />
+      <div>
+        <h1>L.A.M.F.I.</h1>
+        <p class="tagline">Your little networking CRM 🤝</p>
+      </div>
+    </div>
+    <nav>
+      <a href="#overview">📈 Overview</a>
+      <a href="#contacts">📇 Contacts</a>
+      <a href="#settings">⚙️ Settings</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="overview">
+      <div class="tiles" id="tiles"></div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Outreach, last 30 days</h2>
+          <div class="legend" id="legend"></div>
+        </div>
+        <div class="chart-wrap">
+          <svg id="chart" role="img" aria-label="Invites and messages per day"></svg>
+          <div class="tooltip" id="tooltip" hidden></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contacts">
+      <div class="card">
+        <div class="card-head">
+          <h2>Contacts <span class="muted" id="contact-count"></span></h2>
+          <span class="flash" id="selection"></span>
+        </div>
+        <div class="toolbar">
+          <input type="search" id="search" placeholder="🔍 Search name, company, headline, email" />
+          <select id="status-filter">
+            <option value="">All statuses</option>
+            <option value="captured">📇 Saved</option>
+            <option value="invited">🤝 Invited</option>
+            <option value="messaged">💌 Messaged</option>
+          </select>
+          <label class="check"><input type="checkbox" id="unexported" /> Not yet exported</label>
+        </div>
+        <div class="toolbar actions">
+          <button id="copy-md" class="primary" title="Markdown table — paste it into Claude or Notion">📋 Copy for Claude / Notion</button>
+          <button id="copy-csv" class="secondary">Copy CSV</button>
+          <button id="copy-json" class="secondary">Copy JSON</button>
+          <button id="mark-exported" class="text">✅ Mark exported</button>
+          <span class="spacer"></span>
+          <button id="delete" class="text danger">🗑️ Delete</button>
+        </div>
+        <div class="table-wrap">
+          <table id="table">
+            <thead>
+              <tr>
+                <th class="sel"><input type="checkbox" id="select-all" aria-label="Select all" /></th>
+                <th>Name</th>
+                <th>Company</th>
+                <th>Headline</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Last activity</th>
+                <th>Exported</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div class="empty" id="empty" hidden>
+            <div class="empty-emoji">🐣</div>
+            <p class="empty-title">No contacts yet</p>
+            <p class="muted">Hit 🚀 Start on any LinkedIn people page, or 💌 Reach out from someone's profile.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="settings">
+      <div class="card">
+        <div class="card-head"><h2>⚙️ Settings</h2></div>
+        <form id="settings-form" class="form">
+          <label>
+            <span>🔑 Anthropic API key</span>
+            <input type="password" name="apiKey" autocomplete="off" placeholder="sk-ant-…" />
+            <small>Stored only in this browser's extension storage. Used from the background worker, never from the LinkedIn page.</small>
+          </label>
+          <label>
+            <span>🧠 Model</span>
+            <input type="text" name="model" />
+          </label>
+          <label>
+            <span>🎯 Your goal (what the AI writes the hook to serve)</span>
+            <textarea name="goal" rows="3"></textarea>
+          </label>
+          <label>
+            <span>🤝 Connection note template <small>· max 300 chars after fill</small></span>
+            <textarea name="noteTemplate" rows="3"></textarea>
+          </label>
+          <label>
+            <span>💌 Direct message template</span>
+            <textarea name="messageTemplate" rows="6"></textarea>
+            <small>Placeholders: <code>{{first}}</code> <code>{{last}}</code> <code>{{name}}</code> <code>{{company}}</code> <code>{{headline}}</code> <code>{{location}}</code> <code>{{hook}}</code> ✨ AI-written</small>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="autoSend" />
+            <span>Send without showing the preview</span>
+          </label>
+          <div class="row">
+            <label>
+              <span>⏱️ Delay between invites, min (ms)</span>
+              <input type="number" name="delayMinMs" min="100" step="100" />
+            </label>
+            <label>
+              <span>max (ms)</span>
+              <input type="number" name="delayMaxMs" min="100" step="100" />
+            </label>
+          </div>
+          <div class="row">
+            <button type="submit" class="primary">Save</button>
+            <span class="flash" id="saved"></span>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>

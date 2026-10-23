@@ -1,0 +1,283 @@
+/* LinkedIn-flavoured card. Every rule is scoped under .lamfi-hud so the
+   page's own styles and ours never leak into each other. */
+.lamfi-hud {
+  --lamfi-blue: #0a66c2;
+  --lamfi-blue-hover: #004182;
+  --lamfi-blue-wash: #e8f3ff;
+  --lamfi-red: #cc1016;
+  --lamfi-text: #1d2226;
+  --lamfi-text-2: #5e6b78;
+  --lamfi-border: #e0dfdc;
+  --lamfi-surface: #ffffff;
+  --lamfi-field: #f4f2ee;
+
+  position: fixed;
+  top: 120px;
+  left: 0;
+  z-index: 2147483647;
+  display: flex;
+  align-items: stretch;
+  background: var(--lamfi-surface);
+  border: 1px solid var(--lamfi-border);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.02),
+    0 10px 30px rgba(0, 0, 0, 0.14);
+  font: 13px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--lamfi-text);
+  user-select: none;
+  cursor: grab;
+  transition:
+    left 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .lamfi-hud {
+    --lamfi-blue: #70b5f9;
+    --lamfi-blue-hover: #a8d4ff;
+    --lamfi-blue-wash: #1d3348;
+    --lamfi-red: #ff6b6b;
+    --lamfi-text: #e9e9e9;
+    --lamfi-text-2: #a8b0b8;
+    --lamfi-border: #38434f;
+    --lamfi-surface: #1b1f23;
+    --lamfi-field: #0f1215;
+  }
+}
+
+.lamfi-hud.lamfi-dragging {
+  transition: none;
+  cursor: grabbing;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+}
+
+/* Docked on one side: rounded only on the inward edge. */
+.lamfi-hud[data-side="right"] {
+  border-right: none;
+  border-radius: 16px 0 0 16px;
+}
+
+.lamfi-hud[data-side="left"] {
+  border-left: none;
+  border-radius: 0 16px 16px 0;
+  flex-direction: row-reverse;
+}
+
+.lamfi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  max-width: 360px;
+}
+
+.lamfi-hud.lamfi-collapsed .lamfi-body {
+  display: none;
+}
+
+.lamfi-hud .lamfi-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lamfi-hud .lamfi-row[hidden],
+.lamfi-hud .lamfi-preview[hidden] {
+  display: none;
+}
+
+.lamfi-logo {
+  width: 30px;
+  height: 30px;
+  pointer-events: none;
+}
+
+.lamfi-counter-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 64px;
+  margin-right: 4px;
+}
+
+.lamfi-count {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--lamfi-blue);
+  font-variant-numeric: tabular-nums;
+  transform-origin: left center;
+}
+
+.lamfi-sub {
+  font-size: 11px;
+  color: var(--lamfi-text-2);
+}
+
+.lamfi-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 320px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--lamfi-field);
+  color: var(--lamfi-text-2);
+  font-size: 12px;
+}
+
+.lamfi-mood {
+  font-size: 14px;
+  line-height: 1.1;
+}
+
+/* ---- buttons: LinkedIn's pill shapes */
+.lamfi-hud button {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    box-shadow 0.15s,
+    transform 0.1s;
+}
+
+.lamfi-hud button:active {
+  transform: scale(0.97);
+}
+
+.lamfi-hud button.lamfi-primary {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--lamfi-blue);
+  color: #fff;
+}
+
+.lamfi-hud button.lamfi-primary:hover {
+  background: var(--lamfi-blue-hover);
+}
+
+.lamfi-hud button.lamfi-primary.lamfi-running {
+  background: var(--lamfi-red);
+}
+
+.lamfi-hud button.lamfi-secondary {
+  padding: 5px 13px;
+  border: 1px solid var(--lamfi-blue);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--lamfi-blue);
+}
+
+.lamfi-hud button.lamfi-secondary:hover {
+  background: var(--lamfi-blue-wash);
+  box-shadow: inset 0 0 0 1px var(--lamfi-blue);
+}
+
+.lamfi-hud button.lamfi-icon-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 16px;
+}
+
+.lamfi-hud button.lamfi-icon-btn:hover {
+  background: var(--lamfi-field);
+}
+
+.lamfi-hud button.lamfi-text-btn {
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--lamfi-text-2);
+}
+
+.lamfi-hud button.lamfi-text-btn:hover {
+  background: var(--lamfi-field);
+}
+
+/* The collapse tab. Full height so it reads as part of the edge. */
+.lamfi-hud button.lamfi-arrow {
+  padding: 0 5px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--lamfi-text-2);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.lamfi-hud button.lamfi-arrow:hover {
+  background: var(--lamfi-field);
+  color: var(--lamfi-blue);
+}
+
+.lamfi-hud.lamfi-collapsed button.lamfi-arrow {
+  padding: 16px 7px;
+  color: var(--lamfi-blue);
+}
+
+/* ---- message preview */
+.lamfi-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--lamfi-border);
+  cursor: default;
+}
+
+.lamfi-preview-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lamfi-text);
+}
+
+.lamfi-preview textarea {
+  width: 320px;
+  padding: 8px 10px;
+  border: 1px solid var(--lamfi-border);
+  border-radius: 10px;
+  background: var(--lamfi-field);
+  color: var(--lamfi-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  resize: vertical;
+  user-select: text;
+  outline: none;
+}
+
+.lamfi-preview textarea:focus {
+  border-color: var(--lamfi-blue);
+  box-shadow: 0 0 0 1px var(--lamfi-blue);
+}
+
+.lamfi-chars {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--lamfi-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.lamfi-chars.lamfi-over {
+  color: var(--lamfi-red);
+  font-weight: 600;
+}
+
+@keyframes lamfi-bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+.lamfi-bump {
+  animation: lamfi-bump 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}

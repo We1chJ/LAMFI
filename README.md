@@ -4,16 +4,18 @@
 
 # L.A.M.F.I. — Link All MotherFuckers In
 
-Chrome extension (MV3) that automates LinkedIn connection requests and keeps a
-personal running total, optionally synced across devices via Cloudflare.
+Chrome extension (MV3) for LinkedIn outreach: auto-connect through a page of
+people, send AI-personalised notes and messages from a profile, and keep a
+local CRM of everyone you touched — with a dashboard you can copy straight
+into Claude or Notion.
 
 > **[Risks](#risks) first.** This automates activity LinkedIn's User Agreement
 > prohibits. Consequences land on your account.
 
 | Path | What |
 | --- | --- |
-| `extension/` | auto-connect + counter |
-| `worker/` | Cloudflare Worker for cross-device sync (optional) |
+| `extension/` | the extension — everything lives here |
+| `worker/` | Cloudflare Worker from the old cross-device counter. Unused now. |
 
 ---
 
@@ -21,154 +23,127 @@ personal running total, optionally synced across devices via Cloudflare.
 
 `chrome://extensions` → **Developer mode** → **Load unpacked** → `extension/`
 
-After any edit: click ↻ **and** hard-reload the page (`Cmd/Ctrl+Shift+R`).
-Skipping the reload leaves an orphaned content script that logs
-`chrome-extension://invalid/` and silently does nothing.
+After any edit: click ↻ **and** hard-reload the LinkedIn tab
+(`Cmd/Ctrl+Shift+R`). Skipping the reload leaves an orphaned content script
+that logs `chrome-extension://invalid/` and silently does nothing.
 
-## Use
+Then click the toolbar icon to open the dashboard and paste an Anthropic API
+key under **Settings**. Without one, everything still works — the AI hook is
+just left for you to type.
 
-A HUD sits on the page edge — drag it anywhere and it snaps to the nearest
-vertical edge; the `›`/`‹` arrow collapses it to a tab. Position persists.
+## The HUD
 
-Start a run from **START**, or right-click → **Connect with everyone on this
-page**. The toolbar badge shows live progress while collapsed.
+A panel sits on the page edge — drag it anywhere and it snaps to the nearest
+vertical edge; `›`/`‹` collapses it to a tab. 📊 opens the dashboard.
 
-Works on any LinkedIn surface with Connect controls — My Network, people search,
-profiles, company **People** tabs — including lists inside a modal, such as a
-post's reactions, which it scrolls in place instead of closing. It matches the
-control by its label or its visible text, not by the URL, and skips the
-neighbours (Message, Follow, Pending/Withdraw, and incoming Accept/Ignore).
+**🚀 Start / ✋ Stop** runs auto-connect on whatever page you're on. Also available
+from right-click → *Connect with everyone on this page*. The toolbar badge
+shows the running count.
 
-Two things vary by surface and both are handled: the control is a `<button>` on
-My Network and in "People also viewed", but an `<a>` on search results and on
-the profile header. And LinkedIn's current shell scrolls `<main id="workspace">`
-rather than the window, so `window.scrollBy()` does nothing there — the engine
-finds whatever actually scrolls.
+On a profile (`/in/<slug>`) the HUD adds **💌 Reach out** and **📇 Save contact**.
 
-LinkedIn does not always render a Connect control on search results; when it
-renders none, there is nothing to click and the run ends on "no more Connect
-buttons found".
+## Auto-connect
 
-There are no volume caps of its own — a run goes until something stops it.
+Works on any surface with Connect controls — My Network, people search,
+profiles, company **People** tabs, lists inside a modal such as a post's
+reactions. It matches the control by label or visible text, not the URL, and
+skips the neighbours (Message, Follow, Pending/Withdraw, Accept/Ignore).
 
-When a page runs dry it turns to the next one and keeps going, until there are
-no more pages (or 100 of them). LinkedIn pages these lists in place — the
-document survives, the URL changes by pushState — so the run just continues.
-The "Next" control is only trusted when numbered `Page N` buttons sit alongside
-it: My Network has a puzzle carousel whose button is also labelled "Next", and
-clicking that would spin a carousel while the run believed it was paging.
+When a page runs dry it turns to the next one, up to 100 pages. "Next" is only
+trusted beside numbered `Page N` buttons — My Network has a carousel whose
+button is also labelled "Next".
 
-**Stops on:** Escape · STOP · LinkedIn's invite-limit notice · 5 consecutive
-failures · no more pages · a dialog that won't close.
+Nothing is counted on faith. A press has to produce proof — an invite modal,
+or the control leaving the page while the rest of the list stays put — before
+it counts. A control that produces neither is retried with a different
+activation strategy, and if it's a link, its link is followed (LinkedIn's own
+invite page renders the modal; the run resumes after the round trip).
 
-**Skips** anyone behind a modal it can't answer honestly — the email-verification
-gate ("To verify this member knows you, please enter their email to connect")
-and "How do you know this person?" are dismissed rather than guessed at. Modal
-copy is matched against whitespace-normalised text, because `textContent` wraps
-sentences across source lines and a pattern written the way the sentence reads
-on screen otherwise misses. Closing is confirmed, not assumed: dismiss control,
-then Escape, then report failure.
+Each confirmed invite logs the person into the CRM with what the list card
+showed: name, headline, profile URL. No extra page visits.
 
-Only *visible* dialogs count as blocking. LinkedIn doesn't remove a dismissed
-modal, it hides it and leaves it in the DOM — so treating "a dialog element
-exists" as "a dialog is in the way" means re-handling the same corpse every
-iteration until the stuck-dialog guard stops the run. That looks exactly like a
-modal refusing to close, and it isn't one. Email gates don't count toward the 5-failure
-brake, since they're an expected outcome rather than a sign something broke.
+**Stops on:** STOP · Escape · LinkedIn's invite-limit notice · 5 consecutive
+failures · no more pages · a dialog that won't close. The email-verification
+gate and "How do you know this person?" are dismissed, never guessed at.
 
-Per invite: find control → activate → wait for proof → resolve the modal →
-count → wait 0.8–2s. Roughly 1.5s each on a
-surface where pressing works; a surface that needs its link followed costs two
-page loads instead.
+There are no volume caps of its own.
 
-"Activate" is a ladder, because clicking isn't one operation. A `<button>` wired
-to onClick responds to `element.click()`; a control whose handler listens on
-`pointerdown` does not, and fails *silently*. So it tries `click()`, checks
-whether anything happened, and escalates to the underlying event sequence if
-not. Whichever worked is remembered per control shape (`BUTTON`, `A[href]`), not
-per URL — the same search URL serves different markup between loads, so a
-page-keyed rule breaks the moment LinkedIn varies its response.
+## Reach out
 
-If both in-page rungs fail and the control is a link, it stops trying to click
-and simply **goes where the link points** — LinkedIn's own invite page, which
-renders the modal by itself. That needs no synthetic input at all, but it does
-mean leaving the page, so the run keeps its place (who's been tried, how many
-sent) in `sessionStorage` and picks itself up on the far side: send → back to
-the list → carry on. Costs two page loads per invite, so it's the last resort
-rather than the default.
+On a profile, **💌 Reach out** does, in order:
 
-"Proof" is an invite modal appearing, or the control leaving the page *while
-the rest of the list stays put*. That second clause matters: LinkedIn re-renders
-these lists on its own, and a re-render takes every control with it — so
-"my control vanished" on its own is not evidence of anything. When the page
-reshuffles, the run records nothing and moves on rather than guessing. Without
-proof, nothing is counted. This matters more than it sounds: the previous version
-assumed the click landed, so when LinkedIn silently ignored it the counter still
-climbed and no invite went out.
+1. Reads the top card (name, headline, location, company) and About.
+2. Opens **Contact info** and takes email / phone / websites if they're shared.
+   LinkedIn only shows these for connections who chose to share them, so
+   often there's nothing.
+3. Saves the contact.
+4. Works out the relationship. Not connected → Connect **with a note**
+   (300-char cap). Already connected → direct message. Pending → stops.
+5. Asks Claude for `{{hook}}`: one or two sentences grounded in their profile,
+   written to serve the goal you set in Settings. Email and phone are not sent
+   to the API.
+6. Renders your template and shows it in the HUD. Edit it, **✨ New hook** to
+   regenerate, **Send** when it's right. (*Send without preview* is a setting,
+   off by default — this goes out under your name.)
+7. Sends, verifies the modal closed or the composer cleared, and logs the
+   event with the message text.
+
+**📇 Save contact** does steps 1–3.
+
+If an account has no *Add a note* option (LinkedIn limits free notes per
+month), nothing is sent and the HUD says so.
+
+Templates use `{{first}}`, `{{last}}`, `{{name}}`, `{{company}}`,
+`{{headline}}`, `{{location}}`, `{{hook}}`.
+
+The profile scraper reads visible text, not class names — LinkedIn's markup is
+obfuscated and shifts without notice. A wrong company or headline shows up in
+the preview before anything is sent.
+
+## Dashboard
+
+Toolbar icon, 📊 on the HUD, or right-click → *Open L.A.M.F.I. dashboard*.
+
+- **Tiles** — invites today / 7 days / all time, messages, contacts, emails found.
+- **Chart** — invites and messages per day, last 30 days.
+- **Contacts** — search, filter by status (`captured` → `invited` →
+  `messaged`), tick rows, then **Copy for Claude / Notion** (a Markdown table that pastes cleanly
+  into Claude or Notion), **Copy CSV** or **Copy JSON**. Buttons act on the
+  selection, or on the whole filtered list when nothing is selected.
+  **Mark exported** stamps them; **Not yet exported** then shows only what's
+  new since.
+- **Settings** — API key, model, your goal, both templates, auto-send, pacing.
+
+Everything is in `chrome.storage.local` on this machine. The background
+service worker is the only writer, so two LinkedIn tabs can't clobber each
+other. Updates on one tab show on the dashboard live.
+
+## Layout
+
+```
+extension/
+  manifest.json
+  background.js          CRM writes, Claude call, badge, menus, dashboard opener
+  content/
+    dom.js               what LinkedIn's markup looks like — the one place to fix
+    connect.js           the run engine
+    profile.js           scrape, contact info, note / DM sending
+    hud.js, hud.css      the panel
+    main.js              wiring
+  dashboard/             the extension page
+```
 
 ## Config
 
-Top of `extension/auto-connect.js`:
+Pacing lives in Settings (`delayMinMs` / `delayMaxMs`, default 800–2000 ms
+between invites). The rest is at the top of `content/connect.js`:
 
 ```js
-delayMinMs: 800,  delayMaxMs: 2000,  // gap between invites
-dialogGraceMs: 60,                   // modal glance
-settleMs: 100,                       // floor — see below
-skipDialogs: false,
-maxConsecutiveFailures: 5,           // the only automatic brake
+confirmMs: 1200,             // wait for proof a press did something
+settleMs: 200,               // floor — lower and you click mid-re-render
+maxConsecutiveFailures: 5,   // the only automatic brake
+maxPages: 100,
 ```
-
-`settleMs` < ~100ms and `dialogGraceMs` < ~40ms are **correctness floors** — go
-lower and you click faster than LinkedIn's list re-renders, hitting the wrong
-row or nothing.
-
-`skipDialogs: true` is fastest but counts every click as a send; on accounts
-that show "Add a note?" it sends nothing and stalls while the counter climbs.
-
-## Sync (optional)
-
-Works fine without it — the count just stays on one machine.
-
-```bash
-cd worker
-npx wrangler login
-npx wrangler kv namespace create CONNECTION_STATS   # paste id into wrangler.toml
-openssl rand -hex 32                                # token
-npx wrangler secret put SYNC_TOKEN
-npx wrangler deploy
-```
-
-Then **once, on any one device**, in the console on a LinkedIn tab:
-
-```js
-LamfiSync.configure("https://connection-stats.YOUR-SUBDOMAIN.workers.dev", "YOUR_TOKEN")
-```
-
-That writes to `chrome.storage.sync`, so it rides your Google account to every
-signed-in Chrome — **other devices need nothing but the extension**. The token
-can't live in Cloudflare, since it's what gets you into Cloudflare.
-
-> Never commit your token or Worker URL. This repo is public.
-
-**API** — all routes need `Authorization: Bearer <token>`:
-`GET /count` · `POST /count {total}` (stores the max) · `DELETE /count`
-
-### How it flows
-
-Local storage is authoritative; Cloudflare is a mirror.
-
-```
-sent → lamfi:total += 1 → HUD updates instantly
-                        → debounce 10s → POST {total} → KV max(incoming, stored)
-```
-
-Pushes carry the **absolute total**, not a delta, so retries can't double-count
-and a stale device can't stomp a higher number. The debounce resets on every
-change — a 50-invite run is one POST, not fifty. Necessary because KV allows
-1 write/sec per key and runs send 2–4/sec.
-
-**Non-obvious:** pull happens on page load only, so two open tabs don't track
-each other.
 
 ## Risks
 
@@ -195,19 +170,7 @@ page offers with:
   .filter((b) => /connect/i.test(b.getAttribute("aria-label") ?? b.textContent)).length
 ```
 
-Zero on a page that visibly has Connect buttons means `isConnectButton()` needs
-updating. Simultaneous bumps in two tabs can lose a count
-(reconciled by taking the higher value). Remote reads lag a local bump by up to
-the 10s debounce.
-
-## Development
-
-No build step. Content scripts share one scope, so `manifest.json` load order
-matters:
-
-```
-config.local.js → lamfi-count.js → lamfi-sync.js → auto-connect.js → hud.js → content.js
-```
-
-`lamfi-sync.js` watches `chrome.storage.onChanged` rather than importing the
-counter — the storage key is the interface.
+Zero on a page that visibly has Connect buttons means `isConnectButton()` in
+`content/dom.js` needs updating. Only 1st-degree connections can be messaged
+directly; anyone else gets a connect note. Email is only ever what the person
+chose to share.

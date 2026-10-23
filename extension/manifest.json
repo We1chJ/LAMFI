@@ -1,20 +1,18 @@
 {
   "manifest_version": 3,
   "name": "L.A.M.F.I.",
-  "version": "0.3.0",
-  "description": "Auto-connect on LinkedIn from the right-click menu, with a personal running total.",
-  "permissions": [
-    "storage",
-    "contextMenus"
-  ],
+  "version": "1.0.0",
+  "description": "LinkedIn outreach: auto-connect, AI-personalised messages, and a local CRM.",
+  "permissions": ["storage", "unlimitedStorage", "contextMenus"],
   "host_permissions": [
-    "https://www.linkedin.com/*"
+    "https://www.linkedin.com/*",
+    "https://api.anthropic.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "L.A.M.F.I.",
+    "default_title": "L.A.M.F.I. — open dashboard",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -24,21 +22,22 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://www.linkedin.com/*"
-      ],
+      "matches": ["https://www.linkedin.com/*"],
       "js": [
-        "config.local.js",
-        "lamfi-count.js",
-        "lamfi-sync.js",
-        "auto-connect.js",
-        "hud.js",
-        "content.js"
+        "content/dom.js",
+        "content/connect.js",
+        "content/profile.js",
+        "content/hud.js",
+        "content/main.js"
       ],
-      "css": [
-        "hud.css"
-      ],
+      "css": ["content/hud.css"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/icon48.png"],
+      "matches": ["https://www.linkedin.com/*"]
     }
   ],
   "icons": {
