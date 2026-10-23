@@ -57,7 +57,16 @@ Nothing is counted on faith. A press has to produce proof — an invite modal,
 or the control leaving the page while the rest of the list stays put — before
 it counts. A control that produces neither is retried with a different
 activation strategy, and if it's a link, its link is followed (LinkedIn's own
-invite page renders the modal; the run resumes after the round trip).
+invite page renders the modal). Links to LinkedIn's invite page skip the
+in-page attempts entirely. Every such link on the page is queued, and the run
+goes invite page → invite page → … returning to the list only once they're all
+done: one page load per person.
+
+People whose card shows **Follow** or **Message** instead of Connect are
+invited too: Connect is still open to them, and the invite page needs only the
+profile name from their card link. Skipped: 1st-degree (already connected),
+pending, cards with no degree shown, and any card where the profile link names
+a different person than the button.
 
 Each confirmed invite logs the person into the CRM with what the list card
 showed: name, headline, profile URL. No extra page visits.

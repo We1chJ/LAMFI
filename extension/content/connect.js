@@ -22,6 +22,9 @@ const LamfiRun = (() => {
     settleMs: 200,
     maxConsecutiveFailures: 5,
     invitePageWaitMs: 12000,
+    // After Send on an invite page, the longest to wait for the modal to
+    // close before moving on. Usually well under a second.
+    sendSettleMs: 3000,
     maxHops: 300,
     pageWaitMs: 4000,
     maxPages: 100,
@@ -199,12 +202,19 @@ const LamfiRun = (() => {
     }
   }
 
+  /**
+   * LinkedIn's own invite page. A Connect link pointing here never responds
+   * to an in-page press from script, so don't spend two confirmation windows
+   * proving it again.
+   */
+  const INVITE_PAGE = /\/preload\/[^?]*invite/;
+
   async function activateControl(btn, contact) {
     const label = D.label(btn);
     const shape = shapeOf(btn);
     const href = btn.getAttribute("href");
 
-    if (href && navigateShapes.has(shape)) {
+    if (href && (navigateShapes.has(shape) || INVITE_PAGE.test(href))) {
       followInviteLink(btn, href, contact);
       return "navigating";
     }
@@ -235,12 +245,92 @@ const LamfiRun = (() => {
     return null;
   }
 
+  /**
+   * People whose card offers Follow or Message instead of Connect. Connect is
+   * still open to them (it sits under More on their profile), and LinkedIn's
+   * invite page needs nothing but their profile name — so build its link.
+   *
+   * Skipped: 1st-degree (already connected), cards with no degree shown,
+   * anyone already pending, and any card where the profile link doesn't name
+   * the same person as the button. That last check is what stops a loose card
+   * boundary from inviting the neighbour instead.
+   */
+  const HIDDEN_CONNECT = /^(?:follow|send a message to|message)\s+(.+)$/i;
+  const firstWord = (s) =>
+    (s ?? "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").trim().split(/\s+/)[0] ?? "";
+
+  function hiddenInviteTargets() {
+    const targets = new Map();
+    for (const el of D.queryAll(D.SELECTORS.clickable)) {
+      const named = HIDDEN_CONNECT.exec(D.label(el))?.[1];
+      if (!named || !D.isVisible(el)) continue;
+
+      // Smallest ancestor that holds a profile link: this person's card.
+      let card = el;
+      let slug = null;
+      for (let i = 0; i < 12 && card && !slug; i++) {
+        slug = [...card.querySelectorAll('a[href*="/in/"]')].map((a) => D.slugOf(a.href)).find(Boolean) ?? null;
+        if (!slug) card = card.parentElement;
+      }
+      if (!slug) continue;
+
+      const nameOnCard = [...card.querySelectorAll('a[href*="/in/"]')]
+        .filter((a) => D.slugOf(a.href) === slug)
+        .map((a) => a.innerText.trim())
+        .find(Boolean);
+      if (!nameOnCard || firstWord(nameOnCard) !== firstWord(named)) continue;
+
+      const degree = /[•·]\s*(1st|2nd|3rd)/.exec(card.innerText ?? "")?.[1];
+      if (degree !== "2nd" && degree !== "3rd") continue;
+
+      const controls = D.queryAll(D.SELECTORS.clickable, card);
+      if (controls.some((c) => D.isPendingButton(c) || D.isConnectButton(c))) continue;
+
+      const key = `in:${slug}`;
+      if (tried.has(key) || targets.has(key)) continue;
+      targets.set(key, {
+        key,
+        href: `${location.origin}/preload/search-custom-invite/?vanityName=${encodeURIComponent(slug)}`,
+        contact: cardInfo(el),
+      });
+    }
+    return [...targets.values()];
+  }
+
+  /** Everyone on the page an invite page can reach: Connect links, then Follow/Message cards. */
+  function inviteTargets() {
+    const targets = [];
+    for (const el of D.queryAll(D.SELECTORS.clickable)) {
+      if (!D.isConnectButton(el)) continue;
+      const href = el.getAttribute("href");
+      const key = keyOf(el);
+      if (!href || !INVITE_PAGE.test(href) || tried.has(key)) continue;
+      targets.push({ key, href: new URL(href, location.origin).toString(), contact: cardInfo(el) });
+    }
+    return [...targets, ...hiddenInviteTargets()];
+  }
+
+  /**
+   * Hand the run over to LinkedIn's invite pages.
+   *
+   * Everyone else on the page that an invite page can reach is queued along
+   * with this one, so the run goes invite page → invite page → … and only
+   * comes back to the list once they're all done. One page load per person
+   * instead of two.
+   */
   function followInviteLink(btn, href, contact) {
-    tried.add(keyOf(btn));
+    const first = { key: keyOf(btn), href: new URL(href, location.origin).toString(), contact };
+    startInviteChain([first, ...inviteTargets().filter((t) => t.key !== first.key)]);
+  }
+
+  function startInviteChain(targets) {
+    for (const t of targets) tried.add(t.key);
+    const [first, ...rest] = targets;
+    const queue = rest.map(({ href, contact }) => ({ href, contact }));
     hops += 1;
-    saveResume({ phase: "invite", returnUrl: location.href, contact });
-    status(`opening invite page (${hops})`);
-    location.href = new URL(href, location.origin).toString();
+    saveResume({ phase: "invite", returnUrl: location.href, contact: first.contact, queue, failures: 0 });
+    status(`opening invite page (${targets.length} on this page)`);
+    location.href = first.href;
   }
 
   // --------------------------------------------------------------- paging
@@ -332,6 +422,13 @@ const LamfiRun = (() => {
 
       const btn = findNextConnectButton();
       if (!btn) {
+        // No Connect buttons left, but Follow/Message cards may still be
+        // reachable through their invite page.
+        const hidden = hiddenInviteTargets();
+        if (hidden.length) {
+          startInviteChain(hidden);
+          return; // page is on its way out
+        }
         if (scrollAttempts >= CONFIG.maxScrollAttempts) {
           if (await turnPage()) {
             scrollAttempts = 0;
@@ -418,18 +515,53 @@ const LamfiRun = (() => {
 
     if (state.phase === "invite") {
       running = true;
+      let failures = state.failures ?? 0;
       const dialog = await D.pollFor(D.openDialog, CONFIG.invitePageWaitMs);
-      if (!dialog) status("invite page showed no modal — skipping");
-      else {
+      if (!dialog) {
+        status("invite page showed no modal — skipping");
+        failures += 1;
+      } else {
         const outcome = await handleDialog(dialog);
-        if (outcome === "sent") await countSend(state.contact);
-        else if (outcome === "limit") {
+        if (outcome === "sent") {
+          // Moving on is a navigation, which can cancel the request still in
+          // flight. The modal closing is the sign it landed.
+          await D.pollFor(() => !D.isVisible(dialog), CONFIG.sendSettleMs, 50);
+          failures = 0;
+        }
+        if (outcome === "limit" || D.limitNoticeVisible()) {
           clearResume();
           running = false;
           status("STOPPED: LinkedIn weekly invitation limit reached");
+          location.href = state.returnUrl;
           return false;
-        } else status(outcome);
+        }
+        if (outcome === "sent") await countSend(state.contact);
+        else {
+          status(outcome);
+          if (outcome !== SKIPPED_EMAIL) failures += 1;
+        }
       }
+
+      // Stopped while this page loaded, or too many misses in a row: go home.
+      const queue = state.queue ?? [];
+      if (!running || failures >= CONFIG.maxConsecutiveFailures) {
+        clearResume();
+        if (running) status(`stopped: ${failures} invites in a row failed`);
+        running = false;
+        location.href = state.returnUrl;
+        return false;
+      }
+
+      // Straight to the next person on the list, without going back to it.
+      const next = queue.shift();
+      if (next) {
+        hops += 1;
+        saveResume({ phase: "invite", returnUrl: state.returnUrl, contact: next.contact, queue, failures });
+        status(`next: ${next.contact?.name || "invite"} (${queue.length} after)`);
+        location.href = next.href;
+        return true;
+      }
+
       saveResume({ phase: "return" });
       location.href = state.returnUrl;
       return true;
