@@ -31,19 +31,35 @@ const LamfiProfile = (() => {
     return null;
   }
 
+  /**
+   * The person's name heading. An <h1> on the older layout; the redesigned
+   * profile has no <h1> at all and puts the name in the page's first <h2>.
+   */
+  const nameEl = () => {
+    const main = mainEl();
+    return main.querySelector("h1") ?? [...main.querySelectorAll("h2")].find((h) => D.textOf(h)) ?? null;
+  };
+
+  /** The top card: name, headline, location, chips and action buttons. */
+  const topCard = () => {
+    const h = nameEl();
+    return h?.closest("section") ?? h?.parentElement?.parentElement ?? mainEl();
+  };
+
+  /** "(3) Jane Doe | LinkedIn" → "Jane Doe", for when no heading reads. */
+  const nameFromTitle = () => document.title.replace(/^\(\d+\)\s*/, "").split(" | ")[0].trim();
+
   // -------------------------------------------------------------- scrape
 
   function scrape() {
     const main = mainEl();
-    const h1 = main.querySelector("h1");
-    const name = D.textOf(h1);
+    const name = D.textOf(nameEl()) || nameFromTitle();
     const url = location.origin + location.pathname.replace(/\/?$/, "/");
     const id = D.slugOf(url);
 
-    // The top card as the eye reads it: name, headline, location, then the
-    // company/school chips and the connection count.
-    const card = h1?.closest("section") ?? h1?.parentElement?.parentElement ?? main;
-    const top = lines(card);
+    // The top card as the eye reads it: name, pronouns, headline, location,
+    // then the company/school chips and the connection count.
+    const top = lines(topCard());
     const noise = /^(contact info|\d+\+? (connections|followers)|·|•|\d+(st|nd|rd|th)( degree)?|he\/him|she\/her|they\/them|\(.*\))$/i;
     const body = top.filter((s) => s !== name && !s.startsWith(name) && !noise.test(s));
     const headline = body[0] ?? "";
@@ -51,8 +67,14 @@ const LamfiProfile = (() => {
       body.find((s, i) => i > 0 && (/,\s*\S/.test(s) || /\b(area|region|united|kingdom|states)\b/i.test(s))) ?? "";
 
     let company = "";
-    const chip = main.querySelector('button[aria-label^="Current company" i]');
-    if (chip) company = D.label(chip).replace(/^current company:?\s*/i, "").replace(/\.?\s*click.*$/i, "");
+    // "Current company: X. Click to…" on the older layout, "View company: X"
+    // on the redesign.
+    const chip = main.querySelector('[aria-label^="Current company" i],[aria-label^="View company:" i]');
+    if (chip) {
+      company = D.label(chip)
+        .replace(/^(current company|view company):?\s*/i, "")
+        .replace(/\.?\s*click.*$/i, "");
+    }
     if (!company) {
       // First Experience entry: title, then "Company · Full-time".
       const exp = lines(section("Experience")).filter((s) => !/^experience$/i.test(s));
@@ -97,6 +119,7 @@ const LamfiProfile = (() => {
     const main = mainEl();
     return (
       main.querySelector("#top-card-text-details-contact-info") ??
+      main.querySelector('a[href*="/overlay/contact-info"]') ??
       main.querySelector('a[href*="/overview/"]') ??
       [...main.querySelectorAll("a,button")].find((el) => /^contact info$/i.test(D.textOf(el))) ??
       null
@@ -109,12 +132,17 @@ const LamfiProfile = (() => {
     if (!control) return {};
     const before = location.pathname;
     control.click();
+    // On the redesign the click pushes /overlay/contact-info/ but the page
+    // stays put; the overlay is a <dialog> titled "Contact info".
     const dialog = await D.pollFor(
-      () => D.queryAll(D.SELECTORS.dialog).find(D.isVisible) ?? null,
+      () => D.queryAll(D.SELECTORS.dialog).find((d) => D.isVisible(d) && /contact info/i.test(D.textOf(d))) ?? null,
       4000,
     );
 
     if (dialog) {
+      // The dialog opens before its contents load. Every version lists the
+      // person's own profile link, so that showing up means the rest has too.
+      await D.pollFor(() => dialog.querySelector('a[href*="/in/"]'), 3000);
       const info = parseContact(dialog);
       await D.closeDialog(dialog);
       return info;
@@ -132,13 +160,8 @@ const LamfiProfile = (() => {
 
   // -------------------------------------------------------- relationship
 
-  const topControls = () => {
-    // Profile action buttons, not the "People also viewed" cards further down.
-    const main = mainEl();
-    const h1 = main.querySelector("h1");
-    const card = h1?.closest("section") ?? main;
-    return [...card.querySelectorAll(D.SELECTORS.clickable)].filter(D.isVisible);
-  };
+  // Profile action buttons, not the "People also viewed" cards further down.
+  const topControls = () => [...topCard().querySelectorAll(D.SELECTORS.clickable)].filter(D.isVisible);
 
   /** @returns {Promise<"connect"|"message"|"pending"|"unknown">} */
   async function relationship() {

@@ -71,7 +71,9 @@ const LamfiDom = (() => {
     // <button> on My Network, a <div role="button"> on some cards, and a bare
     // <a href="/preload/search-custom-invite/..."> on people search.
     clickable: 'button,[role="button"],a',
-    dialog: 'div[role="dialog"]',
+    // The older surfaces use <div role="dialog">; the redesigned profile page
+    // uses native <dialog> elements with no role at all.
+    dialog: '[role="dialog"],dialog[open]',
     dismiss:
       'button[aria-label="Dismiss"],button[aria-label="Close"],' +
       'button[aria-label*="dismiss" i],button[aria-label*="close" i]',
@@ -237,7 +239,8 @@ const LamfiDom = (() => {
   }
 
   function splitName(name) {
-    const clean = (name ?? "").replace(/\(.*?\)/g, "").replace(/,.*$/, "").trim();
+    // "Erqi (Jack) Wei, PhD" → "Erqi Wei"
+    const clean = (name ?? "").replace(/\(.*?\)/g, " ").replace(/,.*$/, "").replace(/\s+/g, " ").trim();
     const [first = "", ...rest] = clean.split(/\s+/);
     return { name: clean, first, last: rest.join(" ") };
   }
