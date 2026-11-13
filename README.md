@@ -57,9 +57,11 @@ button is also labelled "Next".
 Nothing is counted on faith. A press has to produce proof — an invite modal,
 or the control leaving the page while the rest of the list stays put — before
 it counts. A control that produces neither is retried with a different
-activation strategy, and if it's a link, its link is followed (LinkedIn's own
-invite page renders the modal). Links to LinkedIn's invite page skip the
-in-page attempts entirely. Every such link on the page is queued, and the run
+activation strategy. Link-style Connects skip the in-page attempts and go
+straight to LinkedIn's own invite page, which renders the modal by itself.
+Current markup no longer links there (the Connect `href` is just the page
+you're on), so the invite page is built from the card's profile link — only
+when that card names the same person as the "Invite X to connect" label. Every such link on the page is queued, and the run
 goes invite page → invite page → … returning to the list only once they're all
 done: one page load per person.
 

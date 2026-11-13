@@ -45,7 +45,6 @@ const LamfiRun = (() => {
   let tried = new Set();
   let hops = 0;
   let pagesTurned = 0;
-  let navigateShapes = new Set();
 
   const loadResume = () => {
     try {
@@ -63,7 +62,6 @@ const LamfiRun = (() => {
           tried: [...tried],
           hops,
           pagesTurned,
-          navigateShapes: [...navigateShapes],
           ...extra,
         }),
       );
@@ -202,20 +200,59 @@ const LamfiRun = (() => {
     }
   }
 
-  /**
-   * LinkedIn's own invite page. A Connect link pointing here never responds
-   * to an in-page press from script, so don't spend two confirmation windows
-   * proving it again.
-   */
+  /** LinkedIn's own invite page, which opens the invite modal by itself. */
   const INVITE_PAGE = /\/preload\/[^?]*invite/;
+  const invitePageFor = (slug) =>
+    `${location.origin}/preload/search-custom-invite/?vanityName=${encodeURIComponent(slug)}`;
+
+  const firstWord = (s) =>
+    (s ?? "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").trim().split(/\s+/)[0] ?? "";
+
+  /**
+   * The card around a control: the smallest ancestor holding a profile link,
+   * that link's slug, and the name it shows. Null when there's no profile link.
+   */
+  function cardOf(el) {
+    let card = el;
+    let slug = null;
+    for (let i = 0; i < 12 && card && !slug; i++) {
+      slug = [...card.querySelectorAll('a[href*="/in/"]')].map((a) => D.slugOf(a.href)).find(Boolean) ?? null;
+      if (!slug) card = card.parentElement;
+    }
+    if (!slug) return null;
+    const name = [...card.querySelectorAll('a[href*="/in/"]')]
+      .filter((a) => D.slugOf(a.href) === slug)
+      .map((a) => a.innerText.trim())
+      .find(Boolean);
+    return { card, slug, name: name ?? "" };
+  }
+
+  /**
+   * Where a link-style Connect should go. Older markup linked straight to the
+   * invite page; current markup's href is just the page you're on, which
+   * would reload the list forever. So build the invite page from the card's
+   * profile name — only when the card names the same person as the control's
+   * "Invite X to connect" label, so a loose card boundary can't pick the
+   * neighbour.
+   */
+  function inviteUrlFor(el) {
+    const href = el.getAttribute("href");
+    if (href && INVITE_PAGE.test(href)) return new URL(href, location.origin).toString();
+    const named = /^invite\s+(.+?)\s+to connect$/i.exec(D.label(el))?.[1];
+    const card = named ? cardOf(el) : null;
+    if (!card?.name || firstWord(card.name) !== firstWord(named)) return null;
+    return invitePageFor(card.slug);
+  }
 
   async function activateControl(btn, contact) {
     const label = D.label(btn);
     const shape = shapeOf(btn);
-    const href = btn.getAttribute("href");
 
-    if (href && (navigateShapes.has(shape) || INVITE_PAGE.test(href))) {
-      followInviteLink(btn, href, contact);
+    // Link-style Connects never respond to a press from script, so don't
+    // spend two confirmation windows proving it: go to the invite page.
+    const inviteUrl = btn.tagName === "A" ? inviteUrlFor(btn) : null;
+    if (inviteUrl) {
+      followInviteLink(btn, inviteUrl, contact);
       return "navigating";
     }
 
@@ -233,15 +270,6 @@ const LamfiRun = (() => {
       }
       if (!running) return null;
     }
-
-    if (href) {
-      if (!navigateShapes.has(shape)) {
-        status(`${shape} needs its link followed`);
-        navigateShapes.add(shape);
-      }
-      followInviteLink(btn, href, contact);
-      return "navigating";
-    }
     return null;
   }
 
@@ -256,8 +284,6 @@ const LamfiRun = (() => {
    * boundary from inviting the neighbour instead.
    */
   const HIDDEN_CONNECT = /^(?:follow|send a message to|message)\s+(.+)$/i;
-  const firstWord = (s) =>
-    (s ?? "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").trim().split(/\s+/)[0] ?? "";
 
   function hiddenInviteTargets() {
     const targets = new Map();
@@ -265,20 +291,9 @@ const LamfiRun = (() => {
       const named = HIDDEN_CONNECT.exec(D.label(el))?.[1];
       if (!named || !D.isVisible(el)) continue;
 
-      // Smallest ancestor that holds a profile link: this person's card.
-      let card = el;
-      let slug = null;
-      for (let i = 0; i < 12 && card && !slug; i++) {
-        slug = [...card.querySelectorAll('a[href*="/in/"]')].map((a) => D.slugOf(a.href)).find(Boolean) ?? null;
-        if (!slug) card = card.parentElement;
-      }
-      if (!slug) continue;
-
-      const nameOnCard = [...card.querySelectorAll('a[href*="/in/"]')]
-        .filter((a) => D.slugOf(a.href) === slug)
-        .map((a) => a.innerText.trim())
-        .find(Boolean);
-      if (!nameOnCard || firstWord(nameOnCard) !== firstWord(named)) continue;
+      const found = cardOf(el);
+      if (!found?.name || firstWord(found.name) !== firstWord(named)) continue;
+      const { card, slug } = found;
 
       const degree = /[•·]\s*(1st|2nd|3rd)/.exec(card.innerText ?? "")?.[1];
       if (degree !== "2nd" && degree !== "3rd") continue;
@@ -288,11 +303,7 @@ const LamfiRun = (() => {
 
       const key = `in:${slug}`;
       if (tried.has(key) || targets.has(key)) continue;
-      targets.set(key, {
-        key,
-        href: `${location.origin}/preload/search-custom-invite/?vanityName=${encodeURIComponent(slug)}`,
-        contact: cardInfo(el),
-      });
+      targets.set(key, { key, href: invitePageFor(slug), contact: cardInfo(el) });
     }
     return [...targets.values()];
   }
@@ -301,11 +312,11 @@ const LamfiRun = (() => {
   function inviteTargets() {
     const targets = [];
     for (const el of D.queryAll(D.SELECTORS.clickable)) {
-      if (!D.isConnectButton(el)) continue;
-      const href = el.getAttribute("href");
+      if (el.tagName !== "A" || !D.isConnectButton(el)) continue;
       const key = keyOf(el);
-      if (!href || !INVITE_PAGE.test(href) || tried.has(key)) continue;
-      targets.push({ key, href: new URL(href, location.origin).toString(), contact: cardInfo(el) });
+      const href = tried.has(key) ? null : inviteUrlFor(el);
+      if (!href) continue;
+      targets.push({ key, href, contact: cardInfo(el) });
     }
     return [...targets, ...hiddenInviteTargets()];
   }
@@ -319,7 +330,7 @@ const LamfiRun = (() => {
    * instead of two.
    */
   function followInviteLink(btn, href, contact) {
-    const first = { key: keyOf(btn), href: new URL(href, location.origin).toString(), contact };
+    const first = { key: keyOf(btn), href, contact };
     startInviteChain([first, ...inviteTargets().filter((t) => t.key !== first.key)]);
   }
 
@@ -376,7 +387,6 @@ const LamfiRun = (() => {
       tried = new Set();
       hops = 0;
       pagesTurned = 0;
-      navigateShapes = new Set();
     }
     let scrollAttempts = 0;
     let stuckDialogs = 0;
@@ -505,7 +515,6 @@ const LamfiRun = (() => {
     tried = new Set(state.tried ?? []);
     hops = state.hops ?? 0;
     pagesTurned = state.pagesTurned ?? 0;
-    navigateShapes = new Set(state.navigateShapes ?? []);
 
     if (hops > CONFIG.maxHops) {
       clearResume();

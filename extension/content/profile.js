@@ -76,6 +76,15 @@ const LamfiProfile = (() => {
         .replace(/\.?\s*click.*$/i, "");
     }
     if (!company) {
+      // Newest layout: no label at all, just a "Abridge + 2 more" link on the
+      // line after "Contact info" (the school comes after it). Someone with
+      // no current job shows their school here instead — the preview is where
+      // that gets caught.
+      const contactAt = top.findIndex((s) => /^contact info$/i.test(s));
+      const after = contactAt >= 0 ? (top[contactAt + 1] ?? "") : "";
+      if (after && !/connections|followers|mutual/i.test(after)) company = after.replace(/\s*\+\s*\d+\s+more$/i, "");
+    }
+    if (!company) {
       // First Experience entry: title, then "Company · Full-time".
       const exp = lines(section("Experience")).filter((s) => !/^experience$/i.test(s));
       company = (exp[1] ?? "").split(/\s[·•]\s/)[0];
